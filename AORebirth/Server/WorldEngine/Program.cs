@@ -60,9 +60,9 @@ namespace WorldEngine
 
             WorldState state = app.Services.GetRequiredService<WorldState>();
             ILogger log = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("WorldEngine");
-            log.LogInformation("World listening grpc=http://{Address}:{Port} status={Status} epoch={Epoch} token={Token} recovery={Recovery}s",
-                options.ListenAddress, options.Port,
-                options.StatusPort > 0 ? "http://" + options.ListenAddress + ":" + options.StatusPort + "/status" : "off",
+            log.LogInformation("World listening grpc={Scheme}://{Address}:{Port} status={Status} epoch={Epoch} token={Token} recovery={Recovery}s",
+                options.UseTls ? "https" : "http", options.ListenAddress, options.Port,
+                options.StatusPort > 0 ? "http://" + options.StatusAddress + ":" + options.StatusPort + "/status" : "off",
                 state.Epoch, options.Token.Length > 0 ? "set" : "none", (int)options.RecoveryWindow.TotalSeconds);
             if (options.Token.Length == 0)
                 log.LogWarning("No " + AORebirth.World.Contracts.WorldChannel.TokenVariable + " set: any process on this machine can act as a zone. "
@@ -101,9 +101,13 @@ namespace WorldEngine
             builder.Services.Configure<ConsoleLifetimeOptions>(o => o.SuppressStatusMessages = true);
             builder.WebHost.ConfigureKestrel(kestrel =>
             {
-                kestrel.Listen(options.ListenAddress, options.Port, listen => listen.Protocols = HttpProtocols.Http2);
+                kestrel.Listen(options.ListenAddress, options.Port, listen =>
+                {
+                    listen.Protocols = HttpProtocols.Http2;
+                    if (options.ServerCertificate != null) listen.UseHttps(options.ServerCertificate);
+                });
                 if (options.StatusPort > 0)
-                    kestrel.Listen(options.ListenAddress, options.StatusPort, listen => listen.Protocols = HttpProtocols.Http1);
+                    kestrel.Listen(options.StatusAddress, options.StatusPort, listen => listen.Protocols = HttpProtocols.Http1);
                 kestrel.Limits.Http2.KeepAlivePingDelay = TimeSpan.FromSeconds(10);
                 kestrel.Limits.Http2.KeepAlivePingTimeout = TimeSpan.FromSeconds(5);
             });
