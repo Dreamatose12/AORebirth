@@ -1,6 +1,7 @@
 namespace AORebirth.World.Contracts
 {
     using System;
+    using System.Net;
     using System.Net.Http;
     using System.Threading;
 
@@ -31,6 +32,8 @@ namespace AORebirth.World.Contracts
         public WorldChannel(string url, string role)
         {
             if (string.IsNullOrWhiteSpace(url)) throw new ArgumentException("World url required.", nameof(url));
+            string address = url.Trim();
+            ValidateTransport(address);
             _token = Environment.GetEnvironmentVariable(TokenVariable) ?? string.Empty;
             _role = role ?? string.Empty;
             var handler = new SocketsHttpHandler
@@ -41,12 +44,12 @@ namespace AORebirth.World.Contracts
                 PooledConnectionIdleTimeout = Timeout.InfiniteTimeSpan,
                 ConnectTimeout = TimeSpan.FromSeconds(3)
             };
-            _channel = GrpcChannel.ForAddress(url, new GrpcChannelOptions
+            _channel = GrpcChannel.ForAddress(address, new GrpcChannelOptions
             {
                 HttpHandler = handler,
                 MaxReceiveMessageSize = 4 * 1024 * 1024
             });
-            Url = url;
+            Url = address;
             Registry = new Registry.RegistryClient(_channel);
             Session = new Session.SessionClient(_channel);
             Leases = new Leases.LeasesClient(_channel);
@@ -54,6 +57,22 @@ namespace AORebirth.World.Contracts
             Directory = new Directory.DirectoryClient(_channel);
             Teams = new Teams.TeamsClient(_channel);
             Chat = new Chat.ChatClient(_channel);
+        }
+
+        static void ValidateTransport(string url)
+        {
+            if (!Uri.TryCreate(url, UriKind.Absolute, out Uri? address)
+                || (address.Scheme != Uri.UriSchemeHttp && address.Scheme != Uri.UriSchemeHttps))
+                throw new ArgumentException("World url must be an absolute HTTP or HTTPS address.", nameof(url));
+
+            if (address.Scheme == Uri.UriSchemeHttp && !IsLoopback(address))
+                throw new ArgumentException("A non-loopback World url must use HTTPS.", nameof(url));
+        }
+
+        static bool IsLoopback(Uri address)
+        {
+            if (address.IsLoopback) return true;
+            return IPAddress.TryParse(address.DnsSafeHost, out IPAddress? host) && IPAddress.IsLoopback(host);
         }
 
         public string Url { get; }

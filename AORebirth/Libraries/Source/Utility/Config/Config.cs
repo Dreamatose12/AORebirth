@@ -296,10 +296,15 @@ namespace Utility.Config
 
         public const int DefaultHeartbeatMilliseconds = 2000;
 
-        /// <summary>World's gRPC address for clients, e.g. http://127.0.0.1:7600. Defaults to ListenIP:Port.</summary>
+        /// <summary>
+        /// World's gRPC address for clients, e.g. http://127.0.0.1:7600 or https://world.example:7600.
+        /// Cleartext HTTP is restricted to loopback. Defaults to ListenIP:Port with TLS selected for non-loopback binds.
+        /// </summary>
         public string Url { get; set; }
 
-        /// <summary>The address World binds. Anything but loopback requires AO_REBIRTH_WORLD_TOKEN.</summary>
+        /// <summary>
+        /// The address World binds. Anything but loopback requires AO_REBIRTH_WORLD_TOKEN and a TLS server certificate.
+        /// </summary>
         public string ListenIP { get; set; }
 
         public int Port { get; set; }
@@ -333,12 +338,20 @@ namespace Utility.Config
             }
 
             string host = ResolveListenIP(settings);
+            bool useTls = RequiresTls(host);
             if (host == "0.0.0.0" || host == "::" || host == "*")
             {
                 host = "127.0.0.1";
             }
 
-            return "http://" + (host.Contains(":") ? "[" + host + "]" : host) + ":" + ResolvePort(settings);
+            return (useTls ? "https://" : "http://")
+                + (host.Contains(":") ? "[" + host + "]" : host) + ":" + ResolvePort(settings);
+        }
+
+        static bool RequiresTls(string host)
+        {
+            System.Net.IPAddress address;
+            return !System.Net.IPAddress.TryParse(host, out address) || !System.Net.IPAddress.IsLoopback(address);
         }
 
         public static int ResolveLeaseTtlSeconds(WorldSettings settings)
